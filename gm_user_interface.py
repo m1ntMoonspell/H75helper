@@ -22,9 +22,6 @@ class Form(QDialog):
         self.choose_button.clicked.connect(self.open_file)
         self.quick_button = QPushButton("Quick GM")
         self.quick_button.clicked.connect(self.quick_gm)
-        self.lable = QLabel("All Rights Reserved" \
-        "<a href='https://github.com/m1ntMoonspell?tab=repositories'>@m1nt</a>")
-        self.lable.setOpenExternalLinks(True)
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.edit)
@@ -32,7 +29,6 @@ class Form(QDialog):
         layout.addWidget(self.clear_button)
         layout.addWidget(self.choose_button)
         layout.addWidget(self.quick_button)
-        layout.addWidget(self.lable)
         self.setLayout(layout)
         self.setWindowTitle("H75 Item ID Helper")
         self.path = ""

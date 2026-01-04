@@ -18,10 +18,6 @@ class TraceDia(QDialog):
         self.file_button.clicked.connect(self.open_files)
         self.slice_button = QPushButton("Slice...",self)
         self.slice_button.clicked.connect(self.slice_phrase)
-        self.label = QLabel("All Rights Reserved" \
-        "<a href='https://github.com/m1ntMoonspell?tab=repositories'>@m1nt</a>",
-        self)
-        self.label.setOpenExternalLinks(True)
         layout = QVBoxLayout(self)
         hl = QHBoxLayout()
         hlbtn = QHBoxLayout()
@@ -41,7 +37,6 @@ class TraceDia(QDialog):
         layout.addWidget(self.slice_button)
         layout.addLayout(hlbtn)
         layout.addLayout(hl)
-        layout.addWidget(self.label)
         self.setLayout(layout)
         self.slicer = SliceDia()
 
