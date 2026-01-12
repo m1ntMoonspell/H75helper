@@ -71,7 +71,7 @@ class TraceDia(QDialog):
         for index,colum in enumerate(reader_head):
             if colum == "ID":
                 index_for_ID = int(index)
-            if colum == "链接":
+            if colum == "Trace链接":
                 index_for_link = int(index)
             if colum == "所属系统":
                 index_for_title = int(index)
