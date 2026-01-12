@@ -9,6 +9,7 @@ class SliceDia(QDialog):
         self.edit = QLineEdit(placeholderText="Enter text here")
         self.button = QPushButton("Slice!")
         self.button.clicked.connect(self.get_text)
+        self.button.clicked.connect(self.edit.clear)
         self.clear_button = QPushButton("Clear")
         self.clear_button.clicked.connect(self.edit.clear)
         layout = QVBoxLayout(self)
