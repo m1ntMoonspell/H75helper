@@ -72,8 +72,7 @@ class Form(QDialog):
                     title = parts[1]
                     quick_dict[title]=gm
                 quick_list = GMList(quick_dict)
-                if quick_list.exec():
-                    quick_list.show()
+                quick_list.show()
             else:
                 pass
 
