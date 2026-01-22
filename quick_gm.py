@@ -29,6 +29,7 @@ class GMList(QDialog):
         if inDia.exec():
             inDia.show()
 
+
 if __name__ == "__main__":
     app = QApplication()
     list = GMList(item_dict={})
