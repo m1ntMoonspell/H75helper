@@ -5,6 +5,7 @@ import csv,os
 from pathlib import Path
 from slice_dialog import SliceDia
 from sheet_dialog import Sheet
+from ident2link import TransLink
 
 
 class TraceDia(QDialog):
@@ -18,6 +19,8 @@ class TraceDia(QDialog):
         self.file_button.clicked.connect(self.open_files)
         self.slice_button = QPushButton("Slice...",self)
         self.slice_button.clicked.connect(self.slice_phrase)
+        self.tolink_button = QPushButton("2 Link",self)
+        self.tolink_button.clicked.connect(self.tolink_func)
         layout = QVBoxLayout(self)
         hl = QHBoxLayout()
         hlbtn = QHBoxLayout()
@@ -35,13 +38,18 @@ class TraceDia(QDialog):
         hl.addStretch()
         layout.addWidget(self.file_button)
         layout.addWidget(self.slice_button)
+        layout.addWidget(self.tolink_button)
         layout.addLayout(hlbtn)
         layout.addLayout(hl)
         self.setLayout(layout)
         self.slicer = SliceDia()
+        self.tolink = TransLink()
 
     def slice_phrase(self):
         self.slicer.exec()
+
+    def tolink_func(self):
+        self.tolink.exec()
 
     def switch_to_NA(self):
         self.status.setText("<p style='color:blue'>NA</p>")
