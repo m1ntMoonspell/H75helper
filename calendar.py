@@ -1,37 +1,46 @@
 import sys
-from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLineEdit
-from datetime import datetime
+from PySide6.QtWidgets import (QApplication, QDialog, QVBoxLayout, QLineEdit,
+                               QHBoxLayout,QLabel,QPushButton)
+from PySide6.QtGui import QGuiApplication
+import datetime
 
-class DynamicLineEditWidget(QWidget):
-    def __init__(self):
-        super().__init__()
+class Calendar(QDialog):
+    def __init__(self,parent=None):
+        super().__init__(parent)
         self.initUI()
 
     def initUI(self):
-        self.setWindowTitle('Dynamic LineEdit Example')
-        self.setGeometry(100, 100, 300, 200)
-        
-        # 创建垂直布局
-        self.layout = QVBoxLayout()
-        self.setLayout(self.layout)
-        
-        # 创建第一个LineEdit并添加到布局中
+        self.titleLayout = QHBoxLayout()
+        self.name_edit = QLineEdit(self,placeholderText="Name")
+        self.time_label = QLabel(self)
+        self.confirm_button = QPushButton("确认")
+        self.confirm_button.connect()
+        today = datetime.date.today()
+        self.time_label.setText(f"-{today}-日报")
+        self.titleLayout.addWidget(self.name_edit)
+        self.titleLayout.addWidget(self.time_label)
+        self.UILayout = QVBoxLayout()
+        self.setLayout(self.UILayout)
+        self.contentLayout = QVBoxLayout()       
         self.currentLineEdit = QLineEdit(self)
-        self.layout.addWidget(self.currentLineEdit)
-        
-        # 为第一个LineEdit设置回车事件处理
+        self.contentLayout.addWidget(self.currentLineEdit)
+        self.UILayout.addLayout(self.titleLayout)
+        self.UILayout.addLayout(self.contentLayout)       
         self.currentLineEdit.returnPressed.connect(self.addNewLineEdit)
-
+        
     def addNewLineEdit(self):
-        # 创建新的LineEdit
         newLineEdit = QLineEdit(self)
-        self.layout.addWidget(newLineEdit)  # 添加到布局中
-        newLineEdit.returnPressed.connect(self.addNewLineEdit)  # 为新LineEdit设置回车事件处理
-        newLineEdit.setFocus()  # 设置新LineEdit获得焦点
-        self.currentLineEdit = newLineEdit  # 更新当前LineEdit引用，以便可以连续添加更多LineEdit
+        self.contentLayout.addWidget(newLineEdit) 
+        newLineEdit.returnPressed.connect(self.addNewLineEdit)
+        newLineEdit.setFocus()
+        self.currentLineEdit = newLineEdit
+
+    def toclip(self,text):
+        cb = QGuiApplication.clipboard()
+        cb.setText(text)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    ex = DynamicLineEditWidget()
+    ex = Calendar()
     ex.show()
     sys.exit(app.exec())

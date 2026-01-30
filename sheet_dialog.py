@@ -7,12 +7,12 @@ class Sheet(QTableWidget):
         self.key_list = self.get_key_list(data)
         self.setRowCount(len(self.key_list))
         self.setColumnCount(4)
-        self.setHorizontalHeaderLabels(["ID","所属系统","负责程序","负责qa"])
+        self.setHorizontalHeaderLabels(["所属系统","ID","负责程序","负责qa"])
         self.fill_the_table(data,region)
         self.setWindowTitle("Trace Helper")
         self.resize(750,400)
-        self.setColumnWidth(0,300)
-        self.setColumnWidth(1,150)
+        self.setColumnWidth(1,300)
+        self.setColumnWidth(0,150)
         
 
     def get_key_list(self,data):
@@ -39,9 +39,9 @@ class Sheet(QTableWidget):
             qa_button = QPushButton(f"{v[3]}")
             qa_button.clicked.connect(lambda checked,
                                        t=qa_button.text():self.toclip(t))
-            self.setCellWidget(index_for_row,index_for_column,key_button)
-            index_for_column += 1 
             self.setCellWidget(index_for_row,index_for_column,title_button)
+            index_for_column += 1 
+            self.setCellWidget(index_for_row,index_for_column,key_button)
             index_for_column += 1 
             self.setCellWidget(index_for_row,index_for_column,code_button)
             index_for_column += 1 

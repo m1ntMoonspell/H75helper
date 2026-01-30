@@ -2,11 +2,12 @@ from PySide6.QtWidgets import (QMainWindow,QApplication,QVBoxLayout,QWidget,
                                QTabWidget,QMessageBox,QDialog,QLabel)
 from trace_helper_main_window import TraceDia
 from gm_user_interface import Form
+from calendar import Calendar
 
 class MyWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.resize(300,200)
+        self.resize(350,200)
         self.setWindowTitle("H75 Helper")
         self.creat_subwidgets()
 
@@ -19,6 +20,7 @@ class MyWindow(QMainWindow):
         tab = QTabWidget(parent=self)
         tab.addTab(self.embed_into_vlayout(Form(self)),"GM Helper")
         tab.addTab(self.embed_into_vlayout(TraceDia(self)),"Trace Helper")
+        tab.addTab(self.embed_into_vlayout(Calendar(self)),"Calendar Helper")
         self.setCentralWidget(tab)
 
     def embed_into_vlayout(self,w,margin=5):
