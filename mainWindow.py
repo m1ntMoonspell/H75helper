@@ -20,7 +20,6 @@ class MyWindow(QMainWindow):
         tab = QTabWidget(parent=self)
         tab.addTab(self.embed_into_vlayout(Form(self)),"GM Helper")
         tab.addTab(self.embed_into_vlayout(TraceDia(self)),"Trace Helper")
-        tab.addTab(self.embed_into_vlayout(Calendar(self)),"Calendar Helper")
         self.setCentralWidget(tab)
 
     def embed_into_vlayout(self,w,margin=5):
