@@ -41,7 +41,7 @@ class TransLink(QDialog):
     def get_text(self):
         text = self.edit.text()
         try:
-            link = f"https://unisdk.nie.netease.com/{self.switchText}/h75/identify-detail?identify={text}&time=last_7_day"
+            link = f"https://unisdk.nie.netease.com/{self.switchText}/h75/identify-detail?identify={text}"
         except ValueError:
             self.status.setText("<p style='color:red;'>Failed</p>")
         else:
