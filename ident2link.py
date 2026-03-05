@@ -1,41 +1,50 @@
-from PySide6.QtWidgets import (QLineEdit,QDialog,QPushButton,
-                               QApplication,QVBoxLayout,
-                               QHBoxLayout,QLabel)
-from PySide6.QtGui import QGuiApplication 
+from PySide6.QtWidgets import (QLineEdit, QDialog, QPushButton,
+                               QApplication, QVBoxLayout,
+                               QHBoxLayout, QLabel)
+from PySide6.QtGui import QGuiApplication
+from custom_widgets import ToggleSwitch 
 
 class TransLink(QDialog):
-    def __init__(self):
-        super().__init__()
-        self.edit = QLineEdit(placeholderText="Enter text here")
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.edit = QLineEdit()
+        self.edit.setPlaceholderText("Enter text here...")
         self.button = QPushButton("To Link")
+        self.button.setObjectName("primaryButton")
         self.button.clicked.connect(self.get_text)
         self.button.clicked.connect(self.edit.clear)
+        
         self.switch_label = QLabel("Switch:")
-        self.switch = QLabel(" ")
+        self.switch = QLabel("Not Selected")
+        self.switch.setStyleSheet("color: #a0a0a0;")
+        
         layout = QVBoxLayout(self)
+        layout.setSpacing(15)
         layout.addWidget(self.edit)
         layout.addWidget(self.button)
         self.setWindowTitle("Identify 2 Link")
+        
         hl = QHBoxLayout()
         h2 = QHBoxLayout()
-        h3 = QHBoxLayout()
-        h3.addWidget(self.switch_label)
-        h3.addWidget(self.switch)
-        h3.addStretch()
-        self.app_button = QPushButton("Client")
-        self.app_button.clicked.connect(self.client_switch)
-        self.server_button = QPushButton("Server")
-        self.server_button.clicked.connect(self.server_switch) 
-        h2.addWidget(self.app_button)
-        h2.addWidget(self.server_button)
+        
+        self.shift_label = QLabel("Client")
+        self.shift_label.setStyleSheet("color: #57F287; font-weight: bold;")
+        self.shift_toggle = ToggleSwitch()
+        self.shift_toggle.stateChanged.connect(self.on_switch_toggled)
+        
+        h2.addWidget(self.shift_label)
+        h2.addWidget(self.shift_toggle)
+        h2.addStretch()
+        
         self.status_label = QLabel("Status:")
-        self.status = QLabel("Null")
+        self.status = QLabel("Ready")
+        self.status.setStyleSheet("color: #a0a0a0;")
         hl.addWidget(self.status_label)
         hl.addWidget(self.status)
         hl.addStretch()
+        
         layout.addLayout(h2)
         layout.addLayout(hl)
-        layout.addLayout(h3)
         self.switchText = " "
 
     def get_text(self):
@@ -43,19 +52,29 @@ class TransLink(QDialog):
         try:
             link = f"https://unisdk.nie.netease.com/{self.switchText}/h75/identify-detail?identify={text}"
         except ValueError:
-            self.status.setText("<p style='color:red;'>Failed</p>")
+            self.status.setText("Failed")
+            self.status.setStyleSheet("color: #ED4245; font-weight: bold;")
         else:
             cb = QGuiApplication.clipboard()
             cb.setText(link)
-            self.status.setText("<p style='color:green;'>Success</p>")
+            self.status.setText("Success")
+            self.status.setStyleSheet("color: #57F287; font-weight: bold;")
 
-    def client_switch(self):
-        self.switch.setText("<p style='color:green;'>Client</p>")
-        self.switchText = "appdump"
-    def server_switch(self):
-        self.switch.setText("<p style='color:blue;'>Server</p>")
-        self.switchText = "serverdump"
+    def on_switch_toggled(self, state):
+        if not state:
+            self.shift_label.setText("Client")
+            self.shift_label.setStyleSheet("color: #57F287; font-weight: bold;")
+            self.switchText = "appdump"
+        else:
+            self.shift_label.setText("Server")
+            self.shift_label.setStyleSheet("color: #5865F2; font-weight: bold;")
+            self.switchText = "serverdump"
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        p = self.parentWidget()
+        if p and p.window():
+            self.move(p.window().geometry().center() - self.rect().center())
 
 if __name__ == "__main__":
     app = QApplication()

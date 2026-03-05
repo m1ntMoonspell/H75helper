@@ -1,29 +1,38 @@
-from PySide6.QtWidgets import (QPushButton,QFileDialog,
-                               QMessageBox,QApplication,QVBoxLayout,
-                               QLabel,QDialog,QHBoxLayout)
-import csv,os
+from PySide6.QtWidgets import (QPushButton, QFileDialog,
+                               QMessageBox, QApplication, QVBoxLayout,
+                               QLabel, QDialog, QHBoxLayout)
+import csv, os
 from pathlib import Path
 
 class NidTracker(QDialog):
     def __init__(self):
         super().__init__()
-        self.file_button = QPushButton("Select...")
+        self.setWindowTitle("NID Tracker")
+        self.resize(300, 150)
+        
+        self.file_button = QPushButton("Select File...")
+        self.file_button.setObjectName("primaryButton")
         self.file_button.clicked.connect(self.open_files)
-        vl1 = QVBoxLayout()
+        
+        vl1 = QVBoxLayout(self)
+        vl1.setSpacing(15)
+        
+        title_label = QLabel("NID Tracker")
+        title_label.setObjectName("titleLabel")
+        vl1.addWidget(title_label)
+        
         vl1.addWidget(self.file_button)
-        self.setLayout(vl1)
+        vl1.addStretch()
 
     def open_files(self):
-        fileName,_ = QFileDialog.getOpenFileName(self)
-        suffix = os.path.splitext(fileName)[1]
+        fileName, _ = QFileDialog.getOpenFileName(self)
+        suffix = os.path.splitext(fileName)[1] if fileName else ""
         if fileName and suffix == ".csv":
             self.get_data(fileName)
         elif fileName and suffix != ".csv":
-            QMessageBox.critical(self,"Error","please choose trace sheet")
-        else:
-            pass
-
-    def get_data(self,fileName):
+            QMessageBox.critical(self, "Error", "Please choose a trace sheet (.csv)")
+    
+    def get_data(self, fileName):
         lines = Path(fileName).read_text(encoding="utf-8").splitlines()
         reader = csv.reader(lines)
         reader_head = next(reader)

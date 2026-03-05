@@ -22,6 +22,8 @@ class Sheet(QTableWidget):
         return key_list
     
     def fill_the_table(self,data,region):
+        self.verticalHeader().setDefaultSectionSize(60)
+        self.verticalHeader().setMinimumSectionSize(60)
         index_for_row = 0
         index_for_column = 0
         for k,v in data.items():
