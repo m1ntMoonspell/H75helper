@@ -7,7 +7,7 @@ from PySide6.QtGui import QIcon, QCloseEvent
 from trace_helper_main_window import TraceDia
 from gm_user_interface import Form
 from daily_report_tab import Calendar as CalendarView
-from settings import SettingsDia, load_config
+from settings import SettingsDia, load_config, _resource_dir
 from custom_toast import ToastNotification
 from holiday_tab import HolidayTab
 
@@ -29,11 +29,10 @@ class MyWindow(QMainWindow):
         self.sync_holiday_float_state()
 
     def setup_tray_and_timers(self):
-        from pathlib import Path
         # Create System Tray
         self.tray_icon = QSystemTrayIcon(self)
         
-        icon_path = str(Path(__file__).parent / "icon.png")
+        icon_path = str(_resource_dir() / "icon.png")
         self.app_icon = QIcon(icon_path)
         
         if self.app_icon.isNull():

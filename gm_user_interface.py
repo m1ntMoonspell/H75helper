@@ -4,9 +4,10 @@ from PySide6.QtWidgets import (QApplication, QPushButton, QLineEdit, QFileDialog
                                QWidget, QVBoxLayout, QHBoxLayout, QMessageBox, QLabel, QComboBox)
 import csv
 from pathlib import Path
-import json
 from popup_window import Popups
 from quick_gm import GMList
+from auto_typer import send_command_to_hwnd, get_window_choices
+from custom_widgets import show_error_toast
 from settings import load_config, save_config
 
 class Form(QWidget):
@@ -111,100 +112,113 @@ class Form(QWidget):
         self.path = config.get("gm_content_path", "")
 
     def open_file(self):
-        fileName, idk = QFileDialog.getOpenFileName(self, "选择原数据表", filter="CSV Files (*.csv)")
-        if fileName:
-            self.path = fileName
-            
-            # Save to unified config
+        file_name, _ = QFileDialog.getOpenFileName(self, "选择原数据表", filter="CSV Files (*.csv)")
+        if file_name:
+            self.path = file_name
             config = load_config()
-            config["gm_content_path"] = fileName
+            config["gm_content_path"] = file_name
             save_config(config)
 
     def quick_gm(self):
-        quick_dict = {}
         config = load_config()
         quick_file_path = config.get("gm_quick_path", "")
-        
         path_obj = Path(quick_file_path) if quick_file_path else None
         
         if path_obj and path_obj.exists():
-            quickFile = path_obj.read_text(encoding="utf-8")
-            lines = quickFile.splitlines()
-            for line in lines:
-                parts = line.split("^")
-                # Ensure parts length prevents index errors
-                if len(parts) >= 2:
-                    gm = parts[0]
-                    title = parts[1]
-                    quick_dict[title] = gm
+            quick_dict = self._parse_quick_file(path_obj)
             self.quick_list = GMList(quick_dict, self)
             self.quick_list.show()
         else:
-            fileName, idk = QFileDialog.getOpenFileName(self, "选择 Quick GM 配置文件", filter="Text Files (*.txt)")
-            if fileName and fileName.endswith(".txt"):
-                # Save to unified config
-                config["gm_quick_path"] = fileName
+            file_name, _ = QFileDialog.getOpenFileName(self, "选择 Quick GM 配置文件", filter="Text Files (*.txt)")
+            if file_name and file_name.endswith(".txt"):
+                config["gm_quick_path"] = file_name
                 save_config(config)
-                
-                content = Path(fileName).read_text(encoding="utf-8")
-                lines = content.splitlines()
-                for line in lines:
-                    parts = line.split("^")
-                    if len(parts) >= 2:
-                        gm = parts[0]
-                        title = parts[1]
-                        quick_dict[title] = gm
+                quick_dict = self._parse_quick_file(Path(file_name))
                 self.quick_list = GMList(quick_dict, self)
                 self.quick_list.show()
+
+    @staticmethod
+    def _parse_quick_file(path):
+        """Parse a Quick GM config file into a {title: gm_command} dict."""
+        quick_dict = {}
+        for line in path.read_text(encoding="utf-8").splitlines():
+            parts = line.split("^")
+            if len(parts) >= 2:
+                quick_dict[parts[1]] = parts[0]
+        return quick_dict
 
     def get_gm_data(self):
         if not self.path:
             QMessageBox.critical(self, "错误", "请选择物品ID全量统计表")
-        else:
-            suffix = os.path.splitext(self.path)[1]
-            if suffix == ".csv":
-                path = Path(self.path)
-                lines = path.read_text().splitlines()
-                reader = csv.reader(lines)
-                reader_chn_header = next(reader)
-                reader_header = next(reader)
-                
-                item_id_index = item_name_index = -1
-                for index, colum in enumerate(reader_chn_header):
-                    if colum == "物品id":
-                        item_id_index = index
-                    elif colum == "物品名称":
-                        item_name_index = index
-                
-                item_dict = {}
-                for row in reader:
-                    try:
-                        item_id = int(row[item_id_index])
-                        item_name = row[item_name_index].strip()
-                    except (ValueError, IndexError):
-                        pass
-                    else:
-                        item_dict[item_name] = item_id
+            return
 
-                inputName = self.edit.text()
-                result_dict = {}
-                for k, v in item_dict.items():
-                    if inputName in k and inputName:
-                        result_dict[k] = v
-                        
-                if result_dict:
-                    self.popwindow(result_dict)
-                elif not result_dict and inputName:
-                    QMessageBox.information(self, "搜索结果", f"未找到与'{inputName}'有关的内容")
-            else:
-                QMessageBox.critical(self, "错误", "请选择物品ID全量统计表 (.csv)")
+        suffix = os.path.splitext(self.path)[1].lower()
+        if suffix != ".csv":
+            QMessageBox.critical(self, "错误", "请选择有效的物品ID全量统计表 (.csv)")
+            return
+
+        try:
+            path = Path(self.path)
+            content = ""
+            # Try multiple encodings for robustness
+            for enc in ["utf-8", "gb18030"]:
+                try:
+                    content = path.read_text(encoding=enc)
+                    break
+                except UnicodeDecodeError:
+                    continue
+            
+            if not content:
+                raise ValueError("无法识别文件编码或文件为空")
+
+            lines = content.splitlines()
+            reader = csv.reader(lines)
+            try:
+                reader_chn_header = next(reader)
+                _ = next(reader)  # Skip second header line
+            except StopIteration:
+                raise ValueError("CSV文件格式不正确（缺少表头）")
+
+            item_id_index = item_name_index = -1
+            for index, colum in enumerate(reader_chn_header):
+                if colum == "物品id":
+                    item_id_index = index
+                elif colum == "物品名称":
+                    item_name_index = index
+
+            if item_id_index == -1 or item_name_index == -1:
+                raise ValueError("未在CSV中找到'物品id'或'物品名称'列")
+
+            item_dict = {}
+            for row in reader:
+                try:
+                    item_id = int(row[item_id_index])
+                    item_name = row[item_name_index].strip()
+                    if item_name:
+                        item_dict[item_name] = item_id
+                except (ValueError, IndexError):
+                    continue
+
+            input_name = self.edit.text().strip()
+            result_dict = {}
+            if input_name:
+                for name, iid in item_dict.items():
+                    if input_name in name:
+                        result_dict[name] = iid
+
+            if result_dict:
+                self.popwindow(result_dict)
+            elif input_name:
+                QMessageBox.information(self, "搜索结果", f"未找到与'{input_name}'有关的内容")
+                
+        except Exception as e:
+            QMessageBox.critical(self, "读取错误", f"处理表格文件时发生错误:\n{str(e)}")
             
     def popwindow(self, dict):
         self.popup = Popups(dict, self)
         self.popup.exec()
 
     def refresh_consoles(self):
-        from auto_typer import get_window_choices
         cfg = load_config()
         title = cfg.get("console_title", "Console")
         
@@ -238,32 +252,11 @@ class Form(QWidget):
 
     def _send_command(self, command):
         """Shared send logic: routes through the selected HWND in the dropdown."""
-        from auto_typer import send_command_to_hwnd
-        from custom_widgets import InAppToast
-        
         hwnd = self.get_selected_hwnd()
         success = send_command_to_hwnd(hwnd, command) if hwnd else False
         
         if not success:
-            from PySide6.QtGui import QGuiApplication
-            cb = QGuiApplication.clipboard()
-            cb.setText(command)
-            
-            win = self.window()
-            if win:
-                toast = InAppToast("未找到目标控制台，已复制到剪贴板！", win, 2500)
-                toast.setStyleSheet("""
-                    QLabel {
-                        background-color: #ED4245; 
-                        color: #ffffff;
-                        border-radius: 8px;
-                        padding: 10px 20px;
-                        font-size: 14px;
-                        font-weight: bold;
-                    }
-                """)
-                toast.show_toast()
-                win._fallback_toast = toast
+            show_error_toast(self, command)
 
 if __name__ == "__main__":
     app = QApplication()

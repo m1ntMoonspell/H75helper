@@ -1,10 +1,8 @@
-import sys
+import datetime
 from PySide6.QtWidgets import (QApplication, QVBoxLayout, QLineEdit, QHBoxLayout, 
                                QLabel, QWidget, QScrollArea, QPushButton, QComboBox)
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QGuiApplication, QKeyEvent
-import datetime
-from PySide6.QtCore import QTimer
 from custom_widgets import ToggleSwitch, InAppToast
 from settings import load_config, save_config
 
@@ -223,6 +221,7 @@ class Calendar(QWidget):
         self.success_toast.show_toast()
         
 if __name__ == '__main__':
+    import sys
     app = QApplication(sys.argv)
     ex = Calendar()
     ex.resize(600, 500)

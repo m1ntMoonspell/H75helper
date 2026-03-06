@@ -98,7 +98,7 @@ class InAppToast(QLabel):
         # Disconnect old finished signals to prevent multiple hides
         try:
             self.anim.finished.disconnect()
-        except:
+        except RuntimeError:
             pass
             
         self.anim.setStartValue(0.0)
@@ -111,3 +111,49 @@ class InAppToast(QLabel):
         self.anim.setEndValue(0.0)
         self.anim.finished.connect(self.hide)
         self.anim.start()
+
+
+def show_error_toast(widget, command):
+    """Shared fallback: copy command to clipboard and show a red error toast on the main window.
+    
+    Walks up the parent chain from `widget` to find either a QMainWindow or the
+    top-level window, then attaches a red InAppToast to it so the toast survives
+    dialog closures.
+    
+    Args:
+        widget: The QWidget initiating the fallback (e.g. a QDialog).
+        command: The command string to copy to the clipboard.
+    """
+    from PySide6.QtGui import QGuiApplication
+    from PySide6.QtWidgets import QMainWindow
+
+    cb = QGuiApplication.clipboard()
+    cb.setText(command)
+
+    # Walk up to find the real persistent main window
+    main_win = None
+    walker = widget.parent() if widget else None
+    while walker:
+        if isinstance(walker, QMainWindow):
+            main_win = walker
+            break
+        walker = walker.parent()
+
+    # Fallback: use widget.window() if no QMainWindow found (e.g. standalone)
+    if not main_win and widget:
+        main_win = widget.window()
+
+    if main_win:
+        toast = InAppToast("未找到目标控制台，已复制到剪贴板！", main_win, 2500)
+        toast.setStyleSheet("""
+            QLabel {
+                background-color: #ED4245;
+                color: #ffffff;
+                border-radius: 8px;
+                padding: 10px 20px;
+                font-size: 14px;
+                font-weight: bold;
+            }
+        """)
+        toast.show_toast()
+        main_win._fallback_toast = toast

@@ -4,7 +4,6 @@ import urllib.request
 import json
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QApplication)
 from PySide6.QtCore import Qt, QTimer, QThread, Signal
-import math
 
 class HolidayFetcher(QThread):
     finished = Signal(dict)

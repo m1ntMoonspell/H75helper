@@ -1,6 +1,7 @@
 from mainWindow import MyWindow
 from PySide6.QtWidgets import QApplication
 from pathlib import Path
+from settings import _resource_dir
 
 import ctypes
 
@@ -12,9 +13,9 @@ if __name__ == "__main__":
     app = QApplication()
     app.setQuitOnLastWindowClosed(False) # Prevents the app from dying when X is clicked
     
-    style_path = Path(__file__).parent / "style.qss"
+    style_path = _resource_dir() / "style.qss"
     if style_path.exists():
-        app.setStyleSheet(style_path.read_text())
+        app.setStyleSheet(style_path.read_text(encoding="utf-8"))
     window = MyWindow()
     window.show()
     app.exec()

@@ -1,7 +1,9 @@
-from PySide6.QtWidgets import (QPushButton, QApplication, QToolTip,
+from PySide6.QtWidgets import (QPushButton, QApplication,
                                QDialog, QVBoxLayout, QScrollArea, QWidget)
-from PySide6.QtGui import QGuiApplication
 from input_dialog import InputDia
+from auto_typer import send_command_to_hwnd, find_form_hwnd
+from custom_widgets import show_error_toast
+
 
 class GMList(QDialog):
     def __init__(self, list_dict, parent=None):
@@ -36,34 +38,11 @@ class GMList(QDialog):
         main_layout.addWidget(scroll)
 
     def toclip(self, text):
-        from auto_typer import send_command_to_hwnd
-        from custom_widgets import InAppToast
-        
-        # Get the selected HWND from the parent Form's console dropdown
-        p = self.parentWidget()
-        hwnd = p.get_selected_hwnd() if p and hasattr(p, 'get_selected_hwnd') else 0
+        hwnd = find_form_hwnd(self)
         success = send_command_to_hwnd(hwnd, text) if hwnd else False
         
         if not success:
-            cb = QGuiApplication.clipboard()
-            cb.setText(text)
-            
-            p = self.parentWidget()
-            if p and p.window():
-                win = p.window()
-                toast = InAppToast("未找到目标控制台，已复制到剪贴板！", win, 2500)
-                toast.setStyleSheet("""
-                    QLabel {
-                        background-color: #ED4245; 
-                        color: #ffffff;
-                        border-radius: 8px;
-                        padding: 10px 20px;
-                        font-size: 14px;
-                        font-weight: bold;
-                    }
-                """)
-                toast.show_toast()
-                win._fallback_toast = toast
+            show_error_toast(self, text)
 
     def show_input(self, text, keys):
         inDia = InputDia(text, keys, self)

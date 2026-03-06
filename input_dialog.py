@@ -1,21 +1,22 @@
-from PySide6.QtWidgets import (QPushButton, QToolTip,
-                               QDialog, QVBoxLayout, QLineEdit)
+from PySide6.QtWidgets import QPushButton, QDialog, QVBoxLayout, QLineEdit, QComboBox
 from PySide6.QtGui import QGuiApplication
+
+from auto_typer import send_command_to_hwnd, find_form_hwnd
+from custom_widgets import show_error_toast
+from settings import load_config, save_config
+
 
 class InputDia(QDialog):
     def __init__(self, text, title, parent=None):
         super().__init__(parent)
-        self.creat_subwidgets(text, title)
         self.setWindowTitle("Input Dia")
+        self._build_ui(text, title)
 
-    def creat_subwidgets(self, text, title):
-        from PySide6.QtWidgets import QComboBox, QLineEdit
-        from settings import load_config, save_config
-        
+    def _build_ui(self, text, title):
         self.button = QPushButton("Confirm")
         self.button.setObjectName("primaryButton")
         
-        if title == "重置宠物CD" or title == "觉醒单个宠物":
+        if title in ("重置宠物CD", "觉醒单个宠物"):
             self.edit = QComboBox(self)
             self.edit.setEditable(False)
             
@@ -33,18 +34,15 @@ class InputDia(QDialog):
             self.edit = QLineEdit(self)
             self.edit.setPlaceholderText("Enter text here...")
             
-        self.button.clicked.connect(lambda checked,
-                                    t=text: self.toclip(t, title=title))
+        self.button.clicked.connect(lambda checked, t=text: self._send(t, title))
+        self.button.clicked.connect(self.reject)
         
         layout = QVBoxLayout(self)
         layout.setSpacing(15)
         layout.addWidget(self.edit)
         layout.addWidget(self.button)
-        self.button.clicked.connect(self.reject)
 
-    def toclip(self, text, title):
-        from PySide6.QtWidgets import QComboBox
-        
+    def _send(self, text, title):
         if isinstance(self.edit, QComboBox):
             val = self.edit.currentText()
             if " - " in val:
@@ -57,45 +55,8 @@ class InputDia(QDialog):
         else:
             command = f"{text}({val})"
         
-        from auto_typer import send_command_to_hwnd
-        from custom_widgets import InAppToast
-        
-        # Walk up parent chain to find the Form with get_selected_hwnd
-        hwnd = 0
-        p = self.parent()
-        while p:
-            if hasattr(p, 'get_selected_hwnd'):
-                hwnd = p.get_selected_hwnd()
-                break
-            p = p.parent()
-        
+        hwnd = find_form_hwnd(self)
         success = send_command_to_hwnd(hwnd, command) if hwnd else False
         
         if not success:
-            cb = QGuiApplication.clipboard()
-            cb.setText(command)
-            
-            # Walk up to the real main window (not this dialog)
-            from PySide6.QtWidgets import QMainWindow
-            main_win = None
-            walker = self.parent()
-            while walker:
-                if isinstance(walker, QMainWindow):
-                    main_win = walker
-                    break
-                walker = walker.parent()
-            
-            if main_win:
-                toast = InAppToast("未找到目标控制台，已复制到剪贴板！", main_win, 2500)
-                toast.setStyleSheet("""
-                    QLabel {
-                        background-color: #ED4245; 
-                        color: #ffffff;
-                        border-radius: 8px;
-                        padding: 10px 20px;
-                        font-size: 14px;
-                        font-weight: bold;
-                    }
-                """)
-                toast.show_toast()
-                main_win._fallback_toast = toast
+            show_error_toast(self, command)

@@ -1,5 +1,29 @@
-__pycache__
-main.spec
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyInstaller
+#  Usually these files are written by a python script, so they can be marked as ignored.
+#  Default driver venv is used.
+*.spec
+build/
+dist/
+
+# IDEs
+.vs/
+.vscode/
+.idea/
+
+# Local configuration
+config.json
 quickPath.json
 contentPath.json
 
+# Logs
+*.log
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/

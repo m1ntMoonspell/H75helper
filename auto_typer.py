@@ -61,3 +61,16 @@ def send_command_to_consoles(title, command):
         return False
         
     return send_command_to_hwnd(windows[0], command)
+
+
+def find_form_hwnd(widget):
+    """Walk up the parent chain from widget to find the Form's selected console HWND.
+    
+    Returns the HWND int if found, 0 otherwise.
+    """
+    p = widget.parent() if widget else None
+    while p:
+        if hasattr(p, 'get_selected_hwnd'):
+            return p.get_selected_hwnd()
+        p = p.parent()
+    return 0

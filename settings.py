@@ -7,18 +7,46 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QCheckBox, QPushButton, QLa
 from PySide6.QtCore import QTime, Qt
 from pathlib import Path
 
-# Provide a simple local path for config data
-CONFIG_PATH = Path(__file__).parent / "config.json"
+APP_NAME = "H75Helper"
+
+def _resource_dir() -> Path:
+    """
+    PyInstaller onefile will extract resources to sys._MEIPASS.
+    In source-run mode, fall back to this file's folder.
+    """
+    return Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
+
+def _user_config_path() -> Path:
+    """
+    Persist user config in a stable per-user location when frozen.
+    """
+    if getattr(sys, "frozen", False):
+        appdata = os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA")
+        base = Path(appdata) if appdata else Path.home()
+        cfg_dir = base / APP_NAME
+        cfg_dir.mkdir(parents=True, exist_ok=True)
+        return cfg_dir / "config.json"
+    return Path(__file__).parent / "config.json"
+
+CONFIG_PATH = _user_config_path()
+DEFAULT_CONFIG_PATH = _resource_dir() / "config.json"
+
 def load_config():
-    if CONFIG_PATH.exists():
-        try:
-            return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-        except:
-            return {}
+    # Prefer persisted user config; otherwise fall back to packaged default.
+    for p in (CONFIG_PATH, DEFAULT_CONFIG_PATH):
+        if p.exists():
+            try:
+                return json.loads(p.read_text(encoding="utf-8"))
+            except Exception:
+                return {}
     return {}
 
 def save_config(data):
-    CONFIG_PATH.write_text(json.dumps(data), encoding="utf-8")
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
 class SettingsDia(QDialog):
     def __init__(self, parent=None):
@@ -143,6 +171,8 @@ class SettingsDia(QDialog):
         
     def open_config_file(self):
         try:
+            if not CONFIG_PATH.exists():
+                save_config(self.config)
             os.startfile(str(CONFIG_PATH))
         except Exception as e:
             QMessageBox.warning(self, "Error", f"无法打开文件:\n{e}")
