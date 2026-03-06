@@ -160,8 +160,8 @@ class Form(QWidget):
         try:
             path = Path(self.path)
             content = ""
-            # Try multiple encodings for robustness
-            for enc in ["utf-8", "gb18030"]:
+            # Try multiple encodings for robustness, utf-8-sig handles BOM
+            for enc in ["utf-8-sig", "gb18030"]:
                 try:
                     content = path.read_text(encoding=enc)
                     break
@@ -174,20 +174,22 @@ class Form(QWidget):
             lines = content.splitlines()
             reader = csv.reader(lines)
             try:
-                reader_chn_header = next(reader)
+                # Sanitize header by stripping whitespace and BOM if any
+                reader_chn_header = [c.strip().replace('\ufeff', '') for c in next(reader)]
                 _ = next(reader)  # Skip second header line
             except StopIteration:
                 raise ValueError("CSV文件格式不正确（缺少表头）")
 
             item_id_index = item_name_index = -1
             for index, colum in enumerate(reader_chn_header):
-                if colum == "物品id":
+                # Fuzzy matching for robustness
+                if "物品id" in colum or "物品ID" in colum:
                     item_id_index = index
-                elif colum == "物品名称":
+                elif "物品名称" in colum:
                     item_name_index = index
 
             if item_id_index == -1 or item_name_index == -1:
-                raise ValueError("未在CSV中找到'物品id'或'物品名称'列")
+                raise ValueError(f"未在CSV中找到'物品id'或'物品名称'列\n当前检测到的表头: {', '.join(reader_chn_header)}")
 
             item_dict = {}
             for row in reader:
