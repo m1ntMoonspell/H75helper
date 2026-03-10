@@ -1,10 +1,30 @@
+import os
 import subprocess
 import sys
+from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QListWidget, QListWidgetItem, QLabel, QFrame, QMessageBox,
 )
 from PySide6.QtCore import Qt, QThread, Signal
+
+
+def _ensure_tool_paths():
+    """Add project-local tool directories to PATH so that ``adb`` and
+    ``scrcpy`` installed by ``setup.bat`` are found even when the system
+    PATH has not been refreshed (requires reopening the terminal)."""
+    base = Path(__file__).resolve().parent
+    extra = [
+        base / "platform-tools",   # adb from setup.bat
+        base / "scrcpy",           # scrcpy from setup.bat
+    ]
+    cur = os.environ.get("PATH", "")
+    for d in extra:
+        if d.is_dir() and str(d) not in cur:
+            os.environ["PATH"] = str(d) + os.pathsep + cur
+            cur = os.environ["PATH"]
+
+_ensure_tool_paths()
 
 
 class DeviceScanner(QThread):
