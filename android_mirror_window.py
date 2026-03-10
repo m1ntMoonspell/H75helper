@@ -6,14 +6,21 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QSizePolicy
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QImage, QPixmap
 
-import scrcpy
-import adbutils
+from scrcpy_client import (
+    ScrcpyClient,
+    ACTION_DOWN, ACTION_UP, ACTION_MOVE,
+    KEYCODE_ENTER, KEYCODE_DEL, KEYCODE_FORWARD_DEL, KEYCODE_BACK,
+    KEYCODE_HOME, KEYCODE_TAB, KEYCODE_SPACE,
+    KEYCODE_DPAD_UP, KEYCODE_DPAD_DOWN, KEYCODE_DPAD_LEFT, KEYCODE_DPAD_RIGHT,
+    KEYCODE_VOLUME_UP, KEYCODE_VOLUME_DOWN, KEYCODE_POWER, KEYCODE_MENU,
+    KEYCODE_SEARCH,
+)
 
 
 class ScrcpyWorker(QThread):
-    """Runs the scrcpy client in a background thread, forwarding frames via signals."""
+    """Runs :class:`ScrcpyClient` in a background thread, forwarding frames."""
 
-    frame_ready = Signal(object)            # numpy ndarray (BGR)
+    frame_ready = Signal(object)            # (bytes, w, h, stride)
     resolution_changed = Signal(int, int)   # video width, height
     connection_error = Signal(str)
 
@@ -23,54 +30,50 @@ class ScrcpyWorker(QThread):
         self.max_fps = max_fps
         self.max_width = max_width
         self.bitrate = bitrate
-        self._client = None
+        self._client: ScrcpyClient | None = None
         self._prev_w = 0
         self._prev_h = 0
 
     @property
-    def client(self):
+    def client(self) -> ScrcpyClient | None:
         return self._client
 
     def run(self):
         try:
-            device = adbutils.AdbClient().device(self.serial)
-            self._client = scrcpy.Client(
-                device=device,
+            self._client = ScrcpyClient(
+                self.serial,
                 max_fps=self.max_fps,
                 max_width=self.max_width,
                 bitrate=self.bitrate,
-                stay_awake=True,
             )
-            self._client.add_listener(scrcpy.EVENT_FRAME, self._on_frame)
-            self._client.start(threaded=False)  # blocks in this QThread
+            self._client.on_frame = self._on_frame
+            self._client.on_init = self._on_init
+            self._client.start()  # blocks
         except Exception as exc:
             self.connection_error.emit(str(exc))
 
-    def _on_frame(self, frame):
-        if frame is None:
-            return
-        h, w = frame.shape[:2]
+    def _on_init(self, w, h):
+        self.resolution_changed.emit(w, h)
+
+    def _on_frame(self, data, w, h, stride):
         if w != self._prev_w or h != self._prev_h:
             self._prev_w, self._prev_h = w, h
             self.resolution_changed.emit(w, h)
-        self.frame_ready.emit(frame)
+        self.frame_ready.emit((data, w, h, stride))
 
     def stop(self):
         if self._client:
-            try:
-                self._client.stop()
-            except Exception:
-                pass
+            self._client.stop()
 
 
 class AndroidMirrorWindow(QWidget):
     """Top-level window that mirrors an Android device screen via scrcpy.
 
-    Features:
     * Initialises to the device's native aspect ratio
     * Automatically adjusts when the device rotates (landscape / portrait)
-    * Maps mouse press / move / release to touch events on the device
+    * Maps mouse press / move / release to touch events
     * Maps keyboard input to Android keycodes / text injection
+    * Maps scroll wheel to scroll events
     """
 
     def __init__(self, serial):
@@ -144,11 +147,10 @@ class AndroidMirrorWindow(QWidget):
         self.frame_w, self.frame_h = w, h
         self._apply_ratio(w, h)
 
-    def _on_frame(self, frame):
-        h, w, _ = frame.shape
+    def _on_frame(self, payload):
+        data, w, h, stride = payload
         self.frame_w, self.frame_h = w, h
-        raw = frame.tobytes()
-        img = QImage(raw, w, h, w * 3, QImage.Format.Format_BGR888)
+        img = QImage(data, w, h, stride, QImage.Format.Format_RGB888)
         pm = QPixmap.fromImage(img).scaled(
             self.display.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
         )
@@ -158,11 +160,10 @@ class AndroidMirrorWindow(QWidget):
         self.display.setText(f"连接失败\n{msg}")
 
     # ------------------------------------------------------------------ #
-    #  Coordinate mapping  (widget → device)
+    #  Coordinate mapping  (widget -> device)
     # ------------------------------------------------------------------ #
 
     def _to_device(self, pos):
-        """Map a QPointF in widget-local coords to device pixel coords."""
         if not self.frame_w or not self.frame_h:
             return None, None
         lw, lh = self.display.width(), self.display.height()
@@ -178,12 +179,12 @@ class AndroidMirrorWindow(QWidget):
         return int(x / rw * self.frame_w), int(y / rh * self.frame_h)
 
     # ------------------------------------------------------------------ #
-    #  Mouse → touch
+    #  Mouse -> touch
     # ------------------------------------------------------------------ #
 
     def _send_touch(self, ev, action):
         client = getattr(self, "_worker", None) and self._worker.client
-        if not client:
+        if not client or not client.control:
             return
         p = ev.position() if hasattr(ev, "position") else ev.localPos()
         dx, dy = self._to_device(p)
@@ -196,28 +197,28 @@ class AndroidMirrorWindow(QWidget):
 
     def mousePressEvent(self, ev):
         if ev.button() == Qt.LeftButton:
-            self._send_touch(ev, scrcpy.ACTION_DOWN)
+            self._send_touch(ev, ACTION_DOWN)
 
     def mouseMoveEvent(self, ev):
         if ev.buttons() & Qt.LeftButton:
-            self._send_touch(ev, scrcpy.ACTION_MOVE)
+            self._send_touch(ev, ACTION_MOVE)
 
     def mouseReleaseEvent(self, ev):
         if ev.button() == Qt.LeftButton:
-            self._send_touch(ev, scrcpy.ACTION_UP)
+            self._send_touch(ev, ACTION_UP)
 
     # ------------------------------------------------------------------ #
-    #  Keyboard → keycode / text
+    #  Keyboard -> keycode / text
     # ------------------------------------------------------------------ #
 
     def keyPressEvent(self, ev):
         client = getattr(self, "_worker", None) and self._worker.client
-        if not client or ev.isAutoRepeat():
+        if not client or not client.control or ev.isAutoRepeat():
             return
         kc = _qt_to_android(ev.key())
         try:
             if kc is not None:
-                client.control.keycode(kc, scrcpy.ACTION_DOWN)
+                client.control.keycode(kc, ACTION_DOWN)
             elif ev.text():
                 client.control.text(ev.text())
         except Exception:
@@ -225,22 +226,22 @@ class AndroidMirrorWindow(QWidget):
 
     def keyReleaseEvent(self, ev):
         client = getattr(self, "_worker", None) and self._worker.client
-        if not client or ev.isAutoRepeat():
+        if not client or not client.control or ev.isAutoRepeat():
             return
         kc = _qt_to_android(ev.key())
         if kc is not None:
             try:
-                client.control.keycode(kc, scrcpy.ACTION_UP)
+                client.control.keycode(kc, ACTION_UP)
             except Exception:
                 pass
 
     # ------------------------------------------------------------------ #
-    #  Scroll → scroll event
+    #  Scroll -> scroll event
     # ------------------------------------------------------------------ #
 
     def wheelEvent(self, ev):
         client = getattr(self, "_worker", None) and self._worker.client
-        if not client:
+        if not client or not client.control:
             return
         p = ev.position() if hasattr(ev, "position") else ev.posF()
         dx, dy = self._to_device(p)
@@ -266,27 +267,27 @@ class AndroidMirrorWindow(QWidget):
 
 
 # ------------------------------------------------------------------ #
-#  Qt key → Android keycode mapping
+#  Qt key -> Android keycode
 # ------------------------------------------------------------------ #
 
 _KEYMAP = {
-    Qt.Key_Return:     scrcpy.KEYCODE_ENTER,
-    Qt.Key_Enter:      scrcpy.KEYCODE_ENTER,
-    Qt.Key_Backspace:  scrcpy.KEYCODE_DEL,
-    Qt.Key_Delete:     scrcpy.KEYCODE_FORWARD_DEL,
-    Qt.Key_Escape:     scrcpy.KEYCODE_BACK,
-    Qt.Key_Home:       scrcpy.KEYCODE_HOME,
-    Qt.Key_Tab:        scrcpy.KEYCODE_TAB,
-    Qt.Key_Space:      scrcpy.KEYCODE_SPACE,
-    Qt.Key_Up:         scrcpy.KEYCODE_DPAD_UP,
-    Qt.Key_Down:       scrcpy.KEYCODE_DPAD_DOWN,
-    Qt.Key_Left:       scrcpy.KEYCODE_DPAD_LEFT,
-    Qt.Key_Right:      scrcpy.KEYCODE_DPAD_RIGHT,
-    Qt.Key_VolumeUp:   scrcpy.KEYCODE_VOLUME_UP,
-    Qt.Key_VolumeDown: scrcpy.KEYCODE_VOLUME_DOWN,
-    Qt.Key_Menu:       scrcpy.KEYCODE_MENU,
-    Qt.Key_Search:     scrcpy.KEYCODE_SEARCH,
-    Qt.Key_PowerOff:   scrcpy.KEYCODE_POWER,
+    Qt.Key_Return:     KEYCODE_ENTER,
+    Qt.Key_Enter:      KEYCODE_ENTER,
+    Qt.Key_Backspace:  KEYCODE_DEL,
+    Qt.Key_Delete:     KEYCODE_FORWARD_DEL,
+    Qt.Key_Escape:     KEYCODE_BACK,
+    Qt.Key_Home:       KEYCODE_HOME,
+    Qt.Key_Tab:        KEYCODE_TAB,
+    Qt.Key_Space:      KEYCODE_SPACE,
+    Qt.Key_Up:         KEYCODE_DPAD_UP,
+    Qt.Key_Down:       KEYCODE_DPAD_DOWN,
+    Qt.Key_Left:       KEYCODE_DPAD_LEFT,
+    Qt.Key_Right:      KEYCODE_DPAD_RIGHT,
+    Qt.Key_VolumeUp:   KEYCODE_VOLUME_UP,
+    Qt.Key_VolumeDown: KEYCODE_VOLUME_DOWN,
+    Qt.Key_Menu:       KEYCODE_MENU,
+    Qt.Key_Search:     KEYCODE_SEARCH,
+    Qt.Key_PowerOff:   KEYCODE_POWER,
 }
 
 

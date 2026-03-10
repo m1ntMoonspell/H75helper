@@ -170,8 +170,8 @@ class AndroidTab(QWidget):
             QMessageBox.critical(
                 self,
                 "依赖缺失",
-                "投屏功能需要以下 Python 库:\n"
-                "  pip install scrcpy-client numpy adbutils av\n\n"
+                "投屏功能需要 PyAV 库用于 H.264 解码:\n"
+                "  pip install av\n\n"
                 f"详细错误: {exc}",
             )
             return

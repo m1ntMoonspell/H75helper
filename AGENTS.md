@@ -32,11 +32,12 @@ No `requirements.txt` exists. Install manually:
 ```
 pip install PySide6
 ```
-For the Android mirroring tab, additional dependencies are needed:
+For the Android mirroring tab (scrcpy protocol implemented in `scrcpy_client.py`):
 ```
-pip install "git+https://github.com/leng-yue/py-scrcpy-client.git" adbutils numpy
+pip install av
 ```
-`pywin32` is not installable on Linux. ADB must be on PATH for Android device detection.
+`pywin32` is not installable on Linux. ADB must be on PATH for Android device detection and mirroring.
+The scrcpy-server binary is auto-downloaded on first connect (~40 KB from GitHub releases).
 
 ### Linting
 
