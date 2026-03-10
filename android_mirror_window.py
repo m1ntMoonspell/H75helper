@@ -4,31 +4,39 @@ Launches the ``scrcpy`` binary as a subprocess.  On Windows the scrcpy
 render surface is re-parented into a PySide6 QWidget via the Win32
 ``SetParent`` API so it appears as an integrated part of the application.
 All input (touch, keyboard, scroll, rotation) is handled natively by scrcpy.
-
-Dependencies
-------------
-* ``scrcpy`` binary on PATH – https://github.com/Genymobile/scrcpy/releases
-* ``adb`` binary on PATH   – part of Android SDK Platform-Tools
-* On Windows: ``pywin32`` (already used by the rest of H75 Helper) for
-  window embedding.  If unavailable scrcpy opens in its own window.
 """
 
 import os
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QSizePolicy
 from PySide6.QtCore import Qt, QTimer
 
 
 # ------------------------------------------------------------------ #
-#  Public helper
+#  Locate scrcpy
 # ------------------------------------------------------------------ #
 
+def _find_scrcpy() -> str | None:
+    """Return full path to ``scrcpy.exe`` or *None*."""
+    found = shutil.which("scrcpy")
+    if found:
+        return os.path.abspath(found)
+
+    base = Path(__file__).resolve().parent
+    for name in ("scrcpy", "scrcpy-win64-v3.1", "scrcpy-win64-v3.0",
+                 "scrcpy-win64-v2.7", "scrcpy-win64-v2.4"):
+        candidate = base / name / ("scrcpy.exe" if sys.platform == "win32" else "scrcpy")
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
 def is_scrcpy_available() -> bool:
-    """Return *True* if the ``scrcpy`` binary can be found on PATH."""
-    return shutil.which("scrcpy") is not None
+    return _find_scrcpy() is not None
 
 
 # ------------------------------------------------------------------ #
@@ -36,16 +44,6 @@ def is_scrcpy_available() -> bool:
 # ------------------------------------------------------------------ #
 
 class AndroidMirrorWindow(QWidget):
-    """Launches *scrcpy* for a given device serial.
-
-    On **Windows** the SDL window created by scrcpy is stripped of its
-    chrome and re-parented into this widget using Win32 API so that it
-    looks like a native part of the application.  The user can resize
-    this widget and the embedded scrcpy surface follows automatically.
-
-    On **other platforms** (or when ``pywin32`` is missing) scrcpy runs
-    in its own standalone window – still fully functional.
-    """
 
     def __init__(self, serial: str):
         super().__init__(None)
@@ -53,7 +51,6 @@ class AndroidMirrorWindow(QWidget):
         self._process: subprocess.Popen | None = None
         self._embedded_hwnd: int = 0
         self._native_hwnd: int = 0
-        self._stderr_path = ""
 
         self.setWindowTitle(f"Android Mirror - {serial}")
         self.setMinimumSize(200, 300)
@@ -65,7 +62,7 @@ class AndroidMirrorWindow(QWidget):
         self.show()
         self._native_hwnd = int(self.winId())
 
-        self._launch_scrcpy()
+        QTimer.singleShot(50, self._launch_scrcpy)
 
     # ---- UI ---------------------------------------------------------- #
 
@@ -81,50 +78,61 @@ class AndroidMirrorWindow(QWidget):
         self._status.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         lay.addWidget(self._status)
 
-    # ---- scrcpy process ---------------------------------------------- #
+    # ---- scrcpy lifecycle -------------------------------------------- #
 
     def _launch_scrcpy(self):
-        scrcpy_exe = shutil.which("scrcpy")
+        scrcpy_exe = _find_scrcpy()
         if not scrcpy_exe:
             self._status.setText(
-                "未找到 scrcpy 命令。\n\n"
-                "请从以下地址下载 scrcpy 并添加到系统 PATH:\n"
+                "未找到 scrcpy。\n\n"
+                "请从以下地址下载并解压到本项目目录:\n"
                 "https://github.com/Genymobile/scrcpy/releases"
             )
             return
 
-        scrcpy_dir = os.path.dirname(os.path.abspath(scrcpy_exe))
-        self._scrcpy_title = f"H75Mirror_{self.serial}_{id(self)}"
+        scrcpy_dir = os.path.dirname(scrcpy_exe)
 
-        cmd = [
-            scrcpy_exe,
-            "-s", self.serial,
-            "--window-title", self._scrcpy_title,
-        ]
+        # ── diagnostic: can scrcpy start at all? ──
+        try:
+            kw: dict = {"capture_output": True, "text": True, "timeout": 5,
+                        "cwd": scrcpy_dir}
+            if sys.platform == "win32":
+                kw["creationflags"] = subprocess.CREATE_NO_WINDOW
+            ver = subprocess.run([scrcpy_exe, "--version"], **kw)
+            if ver.returncode != 0:
+                self._status.setText(
+                    f"scrcpy 无法启动:\n{ver.stderr or ver.stdout}\n\n"
+                    f"路径: {scrcpy_exe}\n"
+                    "请检查目录中是否包含完整的 DLL 文件"
+                )
+                return
+        except Exception as exc:
+            self._status.setText(f"scrcpy 测试运行失败:\n{exc}\n\n路径: {scrcpy_exe}")
+            return
 
-        import tempfile
-        self._stderr_file = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".log", prefix="scrcpy_", delete=False,
-        )
-        self._stderr_path = self._stderr_file.name
+        self._status.setText("scrcpy 验证通过，正在连接设备 ...")
+
+        # ── actual launch ──
+        self._scrcpy_title = f"H75Mirror_{self.serial}"
+
+        cmd = [scrcpy_exe, "-s", self.serial,
+               "--window-title", self._scrcpy_title]
 
         try:
             self._process = subprocess.Popen(
                 cmd,
                 cwd=scrcpy_dir,
                 stdout=subprocess.DEVNULL,
-                stderr=self._stderr_file,
+                stderr=subprocess.PIPE,
             )
         except OSError as exc:
             self._status.setText(f"启动 scrcpy 失败:\n{exc}")
             return
 
-        # Periodic health-check
         self._health_timer = QTimer(self)
         self._health_timer.timeout.connect(self._check_process)
         self._health_timer.start(300)
 
-        # On Windows, try to embed the scrcpy window inside this widget
         if sys.platform == "win32":
             self._embed_timer = QTimer(self)
             self._embed_timer.timeout.connect(self._try_embed)
@@ -134,7 +142,6 @@ class AndroidMirrorWindow(QWidget):
     # ---- Win32 window embedding -------------------------------------- #
 
     def _try_embed(self):
-        """Periodically search for the scrcpy window and embed it."""
         try:
             import win32gui
             import win32con
@@ -149,7 +156,7 @@ class AndroidMirrorWindow(QWidget):
         hwnd = win32gui.FindWindow(None, self._scrcpy_title)
         if not hwnd or not win32gui.IsWindow(hwnd):
             self._embed_attempts += 1
-            if self._embed_attempts > 100:  # ~20 s
+            if self._embed_attempts > 100:
                 self._embed_timer.stop()
             return
 
@@ -159,8 +166,6 @@ class AndroidMirrorWindow(QWidget):
                 return
 
         try:
-            # Strip window chrome but keep it as a popup (NOT WS_CHILD,
-            # because SDL crashes if its window becomes a child window)
             style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
             style &= ~(
                 win32con.WS_CAPTION | win32con.WS_THICKFRAME
@@ -218,35 +223,32 @@ class AndroidMirrorWindow(QWidget):
         self._embedded_hwnd = 0
         self._status.show()
 
-        stderr = self._read_stderr()
+        stderr = ""
+        try:
+            raw = self._process.stderr.read()
+            if raw:
+                stderr = raw.decode(errors="replace").strip()
+        except Exception:
+            pass
 
         if ret == 0:
             self._status.setText("连接已断开")
         else:
-            msg = f"scrcpy 已退出 (code={ret})\n\n"
+            lines = [f"scrcpy 已退出 (code={ret})"]
             if stderr:
-                msg += stderr
+                lines.append("")
+                lines.append(stderr[:1000])
             else:
-                msg += (
-                    "常见原因:\n"
-                    "• 设备未开启 USB 调试\n"
-                    "• 手机上未授权此电脑的 USB 调试\n"
-                    "• scrcpy 缺少 DLL (请确保 scrcpy 目录下有\n"
-                    "  SDL2.dll, avcodec 等文件)\n"
-                    "• 数据线不支持数据传输 (仅充电线)"
-                )
-            self._status.setText(msg)
-
-    def _read_stderr(self) -> str:
-        try:
-            if hasattr(self, "_stderr_file"):
-                self._stderr_file.close()
-            if self._stderr_path and os.path.isfile(self._stderr_path):
-                with open(self._stderr_path, encoding="utf-8", errors="replace") as f:
-                    return f.read(2000).strip()
-        except Exception:
-            pass
-        return ""
+                lines.append("")
+                lines.append("可能的原因:")
+                lines.append("  - 设备未开启 USB 调试")
+                lines.append("  - 手机上未授权此电脑调试")
+                lines.append("  - 数据线仅支持充电")
+                lines.append("  - scrcpy 版本与设备不兼容")
+                lines.append("")
+                lines.append("请尝试在命令行中手动运行:")
+                lines.append(f"  scrcpy -s {self.serial}")
+            self._status.setText("\n".join(lines))
 
     # ---- cleanup ----------------------------------------------------- #
 
@@ -261,9 +263,4 @@ class AndroidMirrorWindow(QWidget):
                 self._process.wait(timeout=3)
             except subprocess.TimeoutExpired:
                 self._process.kill()
-        try:
-            if self._stderr_path and os.path.isfile(self._stderr_path):
-                os.unlink(self._stderr_path)
-        except Exception:
-            pass
         super().closeEvent(ev)
