@@ -1,0 +1,46 @@
+# AGENTS.md
+
+## Cursor Cloud specific instructions
+
+### Project overview
+
+H75 Helper is a **Windows-only** PySide6 desktop application for game QA testers. It has 4 tabs: GM Helper, Trace Helper, 日报 (Daily Report), and 日历 (Holiday Calendar). Entry point is `main.py`.
+
+### Windows-only limitation
+
+The full application (`main.py` / `mainWindow.py`) **cannot run on Linux** because it depends on:
+- `pywin32` (`win32gui`, `win32con`, `win32api`, `win32process`) — used in `auto_typer.py`
+- `winreg` (stdlib, Windows-only) — used in `settings.py`
+- `ctypes.windll` — used in `main.py`
+
+### What CAN run on Linux
+
+Individual modules without Windows dependencies can run standalone:
+- `holiday_tab.py` — fully functional holiday countdown (fetches data from CDN)
+- `test_trans.py` — drag-and-drop test widget
+- `custom_widgets.py`, `custom_toast.py` — pure PySide6 widgets
+
+To run a PySide6 GUI on the Cloud VM, use DISPLAY=:1 (TigerVNC):
+```
+DISPLAY=:1 python3 holiday_tab.py
+```
+
+### Dependencies
+
+No `requirements.txt` exists. Install manually:
+```
+pip install PySide6
+```
+`pywin32` is not installable on Linux.
+
+### Linting
+
+No linter is configured in the repo. You can run:
+```
+ruff check .
+```
+There are ~14 pre-existing lint warnings (unused imports, ambiguous variable names) in the codebase.
+
+### Tests
+
+There is no automated test suite. `test_trans.py` is a manual GUI test widget, not an automated test.
