@@ -61,9 +61,14 @@ class AndroidMirrorWindow(QWidget):
         self.setWindowTitle(f"Android Mirror - {serial}")
         self.setMinimumSize(200, 300)
         self.setAttribute(Qt.WA_DeleteOnClose)
+        self.setAttribute(Qt.WA_NativeWindow)
 
         self._init_geometry()
         self._build_ui()
+
+        self.show()
+        self._native_hwnd = int(self.winId())
+
         self._launch_scrcpy()
 
     # ---- UI ---------------------------------------------------------- #
@@ -150,12 +155,26 @@ class AndroidMirrorWindow(QWidget):
                 )
             return
 
-        hwnd = win32gui.FindWindow(None, self._scrcpy_title)
-        if hwnd:
+        if self._process and self._process.poll() is not None:
             self._embed_timer.stop()
-            self._embedded_hwnd = hwnd
+            return
 
-            # Strip window chrome ──────────────────────────────────
+        hwnd = win32gui.FindWindow(None, self._scrcpy_title)
+        if not hwnd or not win32gui.IsWindow(hwnd):
+            self._embed_attempts += 1
+            if self._embed_attempts > 150:  # ~15 s
+                self._embed_timer.stop()
+                if self._process and self._process.poll() is None:
+                    self._status.setText("scrcpy 已在独立窗口中启动")
+            return
+
+        if not self._native_hwnd or not win32gui.IsWindow(self._native_hwnd):
+            self._native_hwnd = int(self.winId())
+            if not win32gui.IsWindow(self._native_hwnd):
+                return
+
+        try:
+            # Strip window chrome
             style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
             style &= ~(
                 win32con.WS_CAPTION | win32con.WS_THICKFRAME
@@ -172,19 +191,20 @@ class AndroidMirrorWindow(QWidget):
             )
             win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, ex)
 
-            # Re-parent into our PySide6 widget ────────────────────
-            win32gui.SetParent(hwnd, int(self.winId()))
+            # Re-parent into our PySide6 widget
+            win32gui.SetParent(hwnd, self._native_hwnd)
 
+            self._embed_timer.stop()
+            self._embedded_hwnd = hwnd
             self._status.hide()
             self._resize_embedded()
             win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
-            return
-
-        self._embed_attempts += 1
-        if self._embed_attempts > 150:  # ~15 s
-            self._embed_timer.stop()
-            if self._process and self._process.poll() is None:
-                self._status.setText("scrcpy 已在独立窗口中启动")
+        except Exception:
+            self._embed_attempts += 1
+            if self._embed_attempts > 150:
+                self._embed_timer.stop()
+                if self._process and self._process.poll() is None:
+                    self._status.setText("scrcpy 已在独立窗口中启动")
 
     def _resize_embedded(self):
         if not self._embedded_hwnd:

@@ -202,7 +202,6 @@ class AndroidTab(QWidget):
 
         try:
             win = AndroidMirrorWindow(serial)
-            win.show()
             self._mirror_windows[serial] = win
             win.destroyed.connect(
                 lambda _s=serial: self._mirror_windows.pop(_s, None)
