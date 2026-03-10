@@ -168,15 +168,15 @@ class AndroidTab(QWidget):
                 pass
             self._mirror_windows.pop(serial, None)
 
-        try:
-            from android_mirror_window import AndroidMirrorWindow
-        except ImportError as exc:
+        from android_mirror_window import AndroidMirrorWindow, is_scrcpy_available
+
+        if not is_scrcpy_available():
             QMessageBox.critical(
                 self,
-                "依赖缺失",
-                "投屏功能需要 PyAV 库用于 H.264 解码:\n"
-                "  pip install av\n\n"
-                f"详细错误: {exc}",
+                "未找到 scrcpy",
+                "投屏功能需要 scrcpy 命令行工具。\n\n"
+                "请从以下地址下载并解压，然后将目录添加到系统 PATH:\n"
+                "https://github.com/Genymobile/scrcpy/releases",
             )
             return
 

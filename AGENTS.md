@@ -32,12 +32,12 @@ No `requirements.txt` exists. Install manually:
 ```
 pip install PySide6
 ```
-For the Android mirroring tab (scrcpy protocol implemented in `scrcpy_client.py`):
-```
-pip install av
-```
-`pywin32` is not installable on Linux. ADB must be on PATH for Android device detection and mirroring.
-The scrcpy-server binary is auto-downloaded on first connect (~40 KB from GitHub releases).
+For the Android mirroring tab, install `scrcpy` (the binary, not a pip package):
+- Download from https://github.com/Genymobile/scrcpy/releases
+- Extract and add to system PATH
+- On Windows the scrcpy window is embedded in PySide6 via `win32gui.SetParent`
+
+`pywin32` is not installable on Linux. ADB must be on PATH for Android device detection.
 
 ### Linting
 
