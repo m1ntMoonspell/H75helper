@@ -10,6 +10,7 @@ from daily_report_tab import Calendar as CalendarView
 from settings import SettingsDia, load_config, _resource_dir
 from custom_toast import ToastNotification
 from holiday_tab import HolidayTab
+from android_tab import AndroidTab
 
 class MyWindow(QMainWindow):
     def __init__(self):
@@ -186,11 +187,17 @@ class MyWindow(QMainWindow):
         self.btn_holiday.setCheckable(True)
         self.btn_holiday.setProperty("navBtn", True)
         self.btn_group.addButton(self.btn_holiday, 3)
+
+        self.btn_android = QPushButton("Android")
+        self.btn_android.setCheckable(True)
+        self.btn_android.setProperty("navBtn", True)
+        self.btn_group.addButton(self.btn_android, 4)
         
         sidebar_layout.addWidget(self.btn_gm)
         sidebar_layout.addWidget(self.btn_trace)
         sidebar_layout.addWidget(self.btn_calendar)
         sidebar_layout.addWidget(self.btn_holiday)
+        sidebar_layout.addWidget(self.btn_android)
         sidebar_layout.addStretch()
         
         # Stacked Widget
@@ -200,11 +207,13 @@ class MyWindow(QMainWindow):
         self.trace_dia = TraceDia(self)
         self.calendar_view = CalendarView(self)
         self.holiday_view = HolidayTab(self)
+        self.android_tab = AndroidTab(self)
         
         self.stacked_widget.addWidget(self.embed_into_vlayout(self.gm_form, 20))
         self.stacked_widget.addWidget(self.embed_into_vlayout(self.trace_dia, 20))
         self.stacked_widget.addWidget(self.embed_into_vlayout(self.calendar_view, 20))
         self.stacked_widget.addWidget(self.embed_into_vlayout(self.holiday_view, 20))
+        self.stacked_widget.addWidget(self.embed_into_vlayout(self.android_tab, 20))
         
         main_layout.addWidget(sidebar)
         main_layout.addWidget(self.stacked_widget)

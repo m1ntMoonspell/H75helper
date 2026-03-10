@@ -4,7 +4,7 @@
 
 ### Project overview
 
-H75 Helper is a **Windows-only** PySide6 desktop application for game QA testers. It has 4 tabs: GM Helper, Trace Helper, 日报 (Daily Report), and 日历 (Holiday Calendar). Entry point is `main.py`.
+H75 Helper is a **Windows-only** PySide6 desktop application for game QA testers. It has 5 tabs: GM Helper, Trace Helper, 日报 (Daily Report), 日历 (Holiday Calendar), and Android (device mirroring). Entry point is `main.py`.
 
 ### Windows-only limitation
 
@@ -17,6 +17,7 @@ The full application (`main.py` / `mainWindow.py`) **cannot run on Linux** becau
 
 Individual modules without Windows dependencies can run standalone:
 - `holiday_tab.py` — fully functional holiday countdown (fetches data from CDN)
+- `android_tab.py` — Android device list UI (requires `adb` on PATH)
 - `test_trans.py` — drag-and-drop test widget
 - `custom_widgets.py`, `custom_toast.py` — pure PySide6 widgets
 
@@ -31,7 +32,11 @@ No `requirements.txt` exists. Install manually:
 ```
 pip install PySide6
 ```
-`pywin32` is not installable on Linux.
+For the Android mirroring tab, additional dependencies are needed:
+```
+pip install "git+https://github.com/leng-yue/py-scrcpy-client.git" adbutils numpy
+```
+`pywin32` is not installable on Linux. ADB must be on PATH for Android device detection.
 
 ### Linting
 
