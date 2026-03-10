@@ -119,12 +119,11 @@ class AndroidMirrorWindow(QWidget):
                "--window-title", self._scrcpy_title]
 
         try:
-            self._process = subprocess.Popen(
-                cmd,
-                cwd=scrcpy_dir,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-            )
+            # No stdout/stderr redirection — scrcpy must inherit the
+            # parent's handles exactly as if launched from cmd.exe.
+            # Any redirection (PIPE, DEVNULL, file) can cause scrcpy's
+            # SDL/codec init to crash on certain Windows configurations.
+            self._process = subprocess.Popen(cmd, cwd=scrcpy_dir)
         except OSError as exc:
             self._status.setText(f"启动 scrcpy 失败:\n{exc}")
             return
@@ -223,31 +222,21 @@ class AndroidMirrorWindow(QWidget):
         self._embedded_hwnd = 0
         self._status.show()
 
-        stderr = ""
-        try:
-            raw = self._process.stderr.read()
-            if raw:
-                stderr = raw.decode(errors="replace").strip()
-        except Exception:
-            pass
-
         if ret == 0:
             self._status.setText("连接已断开")
         else:
-            lines = [f"scrcpy 已退出 (code={ret})"]
-            if stderr:
-                lines.append("")
-                lines.append(stderr[:1000])
-            else:
-                lines.append("")
-                lines.append("可能的原因:")
-                lines.append("  - 设备未开启 USB 调试")
-                lines.append("  - 手机上未授权此电脑调试")
-                lines.append("  - 数据线仅支持充电")
-                lines.append("  - scrcpy 版本与设备不兼容")
-                lines.append("")
-                lines.append("请尝试在命令行中手动运行:")
-                lines.append(f"  scrcpy -s {self.serial}")
+            lines = [
+                f"scrcpy 已退出 (code={ret})",
+                "",
+                "请先在命令行中手动测试:",
+                f"  scrcpy -s {self.serial}",
+                "",
+                "如果手动运行也失败，常见原因:",
+                "  - 设备未开启 USB 调试",
+                "  - 手机上未授权此电脑调试",
+                "  - 数据线仅支持充电",
+                "  - scrcpy 版本与设备不兼容",
+            ]
             self._status.setText("\n".join(lines))
 
     # ---- cleanup ----------------------------------------------------- #
