@@ -251,17 +251,33 @@ class ScrcpyClient:
             self._launch_server()
             self._connect()
             self._stream_loop()
+        except Exception:
+            if self._alive:
+                raise
         finally:
             self._cleanup()
             if self.on_disconnect:
-                self.on_disconnect()
+                try:
+                    self.on_disconnect()
+                except Exception:
+                    pass
 
     def stop(self):
         self._alive = False
         for s in (self._video_sock, self._ctrl_sock):
             try:
                 if s:
+                    s.shutdown(socket.SHUT_RDWR)
+            except Exception:
+                pass
+            try:
+                if s:
                     s.close()
+            except Exception:
+                pass
+        if self._server_proc:
+            try:
+                self._server_proc.kill()
             except Exception:
                 pass
 
@@ -312,7 +328,17 @@ class ScrcpyClient:
         deadline = time.monotonic() + self.connection_timeout_ms / 1000
 
         # Video socket (retry until server is ready)
-        while time.monotonic() < deadline:
+        while self._alive and time.monotonic() < deadline:
+            if self._server_proc and self._server_proc.poll() is not None:
+                stderr = ""
+                try:
+                    stderr = self._server_proc.stderr.read().decode(errors="replace")
+                except Exception:
+                    pass
+                raise ConnectionError(
+                    f"scrcpy 服务端启动失败 (exit={self._server_proc.returncode})。\n"
+                    f"请确认设备已启用 USB 调试并授权此电脑。\n{stderr}"
+                )
             try:
                 self._video_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self._video_sock.connect(("127.0.0.1", self._port))
@@ -324,8 +350,10 @@ class ScrcpyClient:
                     pass
                 time.sleep(0.1)
         else:
+            if not self._alive:
+                return
             raise ConnectionError(
-                f"无法连接到 scrcpy 服务端 (端口 {self._port})。\n"
+                f"连接 scrcpy 服务端超时 (端口 {self._port})。\n"
                 "请确保设备已启用 USB 调试且已授权此电脑。"
             )
 

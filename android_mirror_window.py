@@ -262,7 +262,9 @@ class AndroidMirrorWindow(QWidget):
     def closeEvent(self, ev):
         if hasattr(self, "_worker"):
             self._worker.stop()
-            self._worker.wait(3000)
+            if not self._worker.wait(2000):
+                self._worker.terminate()
+                self._worker.wait(1000)
         super().closeEvent(ev)
 
 

@@ -159,10 +159,14 @@ class AndroidTab(QWidget):
 
         if serial in self._mirror_windows:
             win = self._mirror_windows[serial]
-            if win.isVisible():
-                win.activateWindow()
-                win.raise_()
-                return
+            try:
+                if win.isVisible():
+                    win.activateWindow()
+                    win.raise_()
+                    return
+            except RuntimeError:
+                pass
+            self._mirror_windows.pop(serial, None)
 
         try:
             from android_mirror_window import AndroidMirrorWindow
@@ -178,12 +182,11 @@ class AndroidTab(QWidget):
 
         try:
             win = AndroidMirrorWindow(serial)
-            win.setAttribute(Qt.WA_DeleteOnClose)
+            win.show()
+            self._mirror_windows[serial] = win
             win.destroyed.connect(
                 lambda _s=serial: self._mirror_windows.pop(_s, None)
             )
-            win.show()
-            self._mirror_windows[serial] = win
         except Exception as exc:
             QMessageBox.critical(
                 self, "连接失败", f"无法连接到设备 {serial}:\n{exc}"
