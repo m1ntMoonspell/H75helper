@@ -13,7 +13,8 @@ Dependencies
   window embedding.  If unavailable scrcpy opens in its own window.
 """
 
-import re
+import os
+import shutil
 import subprocess
 import sys
 
@@ -27,13 +28,7 @@ from PySide6.QtCore import Qt, QTimer
 
 def is_scrcpy_available() -> bool:
     """Return *True* if the ``scrcpy`` binary can be found on PATH."""
-    try:
-        kw: dict = {"capture_output": True, "timeout": 5}
-        if sys.platform == "win32":
-            kw["creationflags"] = subprocess.CREATE_NO_WINDOW
-        return subprocess.run(["scrcpy", "--version"], **kw).returncode == 0
-    except FileNotFoundError:
-        return False
+    return shutil.which("scrcpy") is not None
 
 
 # ------------------------------------------------------------------ #
@@ -57,15 +52,16 @@ class AndroidMirrorWindow(QWidget):
         self.serial = serial
         self._process: subprocess.Popen | None = None
         self._embedded_hwnd: int = 0
+        self._native_hwnd: int = 0
+        self._stderr_path = ""
 
         self.setWindowTitle(f"Android Mirror - {serial}")
         self.setMinimumSize(200, 300)
+        self.resize(360, 640)
         self.setAttribute(Qt.WA_DeleteOnClose)
         self.setAttribute(Qt.WA_NativeWindow)
 
-        self._init_geometry()
         self._build_ui()
-
         self.show()
         self._native_hwnd = int(self.winId())
 
@@ -85,41 +81,11 @@ class AndroidMirrorWindow(QWidget):
         self._status.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         lay.addWidget(self._status)
 
-    def _init_geometry(self):
-        """Set initial size to match the device's aspect ratio."""
-        try:
-            kw: dict = {"capture_output": True, "text": True, "timeout": 5}
-            if sys.platform == "win32":
-                kw["creationflags"] = subprocess.CREATE_NO_WINDOW
-            r = subprocess.run(
-                ["adb", "-s", self.serial, "shell", "wm", "size"], **kw,
-            )
-            m = re.search(r"(\d+)x(\d+)", r.stdout)
-            if m:
-                w, h = int(m.group(1)), int(m.group(2))
-                scale = 800 / max(w, h)
-                self.resize(max(int(w * scale), 200), max(int(h * scale), 200))
-                return
-        except Exception:
-            pass
-        self.resize(360, 640)
-
     # ---- scrcpy process ---------------------------------------------- #
 
     def _launch_scrcpy(self):
-        self._scrcpy_title = f"H75Mirror_{self.serial}_{id(self)}"
-
-        cmd = [
-            "scrcpy",
-            "-s", self.serial,
-            "--window-title", self._scrcpy_title,
-        ]
-
-        try:
-            self._process = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            )
-        except FileNotFoundError:
+        scrcpy_exe = shutil.which("scrcpy")
+        if not scrcpy_exe:
             self._status.setText(
                 "未找到 scrcpy 命令。\n\n"
                 "请从以下地址下载 scrcpy 并添加到系统 PATH:\n"
@@ -127,16 +93,42 @@ class AndroidMirrorWindow(QWidget):
             )
             return
 
+        scrcpy_dir = os.path.dirname(os.path.abspath(scrcpy_exe))
+        self._scrcpy_title = f"H75Mirror_{self.serial}_{id(self)}"
+
+        cmd = [
+            scrcpy_exe,
+            "-s", self.serial,
+            "--window-title", self._scrcpy_title,
+        ]
+
+        import tempfile
+        self._stderr_file = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".log", prefix="scrcpy_", delete=False,
+        )
+        self._stderr_path = self._stderr_file.name
+
+        try:
+            self._process = subprocess.Popen(
+                cmd,
+                cwd=scrcpy_dir,
+                stdout=subprocess.DEVNULL,
+                stderr=self._stderr_file,
+            )
+        except OSError as exc:
+            self._status.setText(f"启动 scrcpy 失败:\n{exc}")
+            return
+
         # Periodic health-check
         self._health_timer = QTimer(self)
         self._health_timer.timeout.connect(self._check_process)
-        self._health_timer.start(500)
+        self._health_timer.start(300)
 
         # On Windows, try to embed the scrcpy window inside this widget
         if sys.platform == "win32":
             self._embed_timer = QTimer(self)
             self._embed_timer.timeout.connect(self._try_embed)
-            self._embed_timer.start(100)
+            self._embed_timer.start(200)
             self._embed_attempts = 0
 
     # ---- Win32 window embedding -------------------------------------- #
@@ -148,11 +140,6 @@ class AndroidMirrorWindow(QWidget):
             import win32con
         except ImportError:
             self._embed_timer.stop()
-            if self._process and self._process.poll() is None:
-                self._status.setText(
-                    "scrcpy 已在独立窗口中启动\n"
-                    "(安装 pywin32 可启用窗口内嵌)"
-                )
             return
 
         if self._process and self._process.poll() is not None:
@@ -162,10 +149,8 @@ class AndroidMirrorWindow(QWidget):
         hwnd = win32gui.FindWindow(None, self._scrcpy_title)
         if not hwnd or not win32gui.IsWindow(hwnd):
             self._embed_attempts += 1
-            if self._embed_attempts > 150:  # ~15 s
+            if self._embed_attempts > 100:  # ~20 s
                 self._embed_timer.stop()
-                if self._process and self._process.poll() is None:
-                    self._status.setText("scrcpy 已在独立窗口中启动")
             return
 
         if not self._native_hwnd or not win32gui.IsWindow(self._native_hwnd):
@@ -174,14 +159,14 @@ class AndroidMirrorWindow(QWidget):
                 return
 
         try:
-            # Strip window chrome
+            # Strip window chrome but keep it as a popup (NOT WS_CHILD,
+            # because SDL crashes if its window becomes a child window)
             style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
             style &= ~(
                 win32con.WS_CAPTION | win32con.WS_THICKFRAME
                 | win32con.WS_MINIMIZEBOX | win32con.WS_MAXIMIZEBOX
                 | win32con.WS_SYSMENU
             )
-            style |= win32con.WS_CHILD
             win32gui.SetWindowLong(hwnd, win32con.GWL_STYLE, style)
 
             ex = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
@@ -191,7 +176,6 @@ class AndroidMirrorWindow(QWidget):
             )
             win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, ex)
 
-            # Re-parent into our PySide6 widget
             win32gui.SetParent(hwnd, self._native_hwnd)
 
             self._embed_timer.stop()
@@ -201,10 +185,8 @@ class AndroidMirrorWindow(QWidget):
             win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
         except Exception:
             self._embed_attempts += 1
-            if self._embed_attempts > 150:
+            if self._embed_attempts > 100:
                 self._embed_timer.stop()
-                if self._process and self._process.poll() is None:
-                    self._status.setText("scrcpy 已在独立窗口中启动")
 
     def _resize_embedded(self):
         if not self._embedded_hwnd:
@@ -236,19 +218,35 @@ class AndroidMirrorWindow(QWidget):
         self._embedded_hwnd = 0
         self._status.show()
 
-        stderr = ""
-        try:
-            stderr = self._process.stderr.read().decode(errors="replace").strip()
-        except Exception:
-            pass
+        stderr = self._read_stderr()
 
         if ret == 0:
             self._status.setText("连接已断开")
         else:
-            msg = f"scrcpy 已退出 (code={ret})"
+            msg = f"scrcpy 已退出 (code={ret})\n\n"
             if stderr:
-                msg += f"\n\n{stderr[:800]}"
+                msg += stderr
+            else:
+                msg += (
+                    "常见原因:\n"
+                    "• 设备未开启 USB 调试\n"
+                    "• 手机上未授权此电脑的 USB 调试\n"
+                    "• scrcpy 缺少 DLL (请确保 scrcpy 目录下有\n"
+                    "  SDL2.dll, avcodec 等文件)\n"
+                    "• 数据线不支持数据传输 (仅充电线)"
+                )
             self._status.setText(msg)
+
+    def _read_stderr(self) -> str:
+        try:
+            if hasattr(self, "_stderr_file"):
+                self._stderr_file.close()
+            if self._stderr_path and os.path.isfile(self._stderr_path):
+                with open(self._stderr_path, encoding="utf-8", errors="replace") as f:
+                    return f.read(2000).strip()
+        except Exception:
+            pass
+        return ""
 
     # ---- cleanup ----------------------------------------------------- #
 
@@ -263,4 +261,9 @@ class AndroidMirrorWindow(QWidget):
                 self._process.wait(timeout=3)
             except subprocess.TimeoutExpired:
                 self._process.kill()
+        try:
+            if self._stderr_path and os.path.isfile(self._stderr_path):
+                os.unlink(self._stderr_path)
+        except Exception:
+            pass
         super().closeEvent(ev)
