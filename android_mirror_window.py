@@ -119,11 +119,20 @@ class AndroidMirrorWindow(QWidget):
                "--window-title", self._scrcpy_title]
 
         try:
-            # No stdout/stderr redirection — scrcpy must inherit the
-            # parent's handles exactly as if launched from cmd.exe.
-            # Any redirection (PIPE, DEVNULL, file) can cause scrcpy's
-            # SDL/codec init to crash on certain Windows configurations.
-            self._process = subprocess.Popen(cmd, cwd=scrcpy_dir)
+            if sys.platform == "win32":
+                # scrcpy (SDL) crashes if it inherits PySide6's modified
+                # console handles. Give it a brand-new console so its
+                # stdin/stdout/stderr are valid, then hide that console.
+                si = subprocess.STARTUPINFO()
+                si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                si.wShowWindow = 0  # SW_HIDE – hides the console window
+                self._process = subprocess.Popen(
+                    cmd, cwd=scrcpy_dir,
+                    startupinfo=si,
+                    creationflags=subprocess.CREATE_NEW_CONSOLE,
+                )
+            else:
+                self._process = subprocess.Popen(cmd, cwd=scrcpy_dir)
         except OSError as exc:
             self._status.setText(f"启动 scrcpy 失败:\n{exc}")
             return
