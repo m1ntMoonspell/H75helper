@@ -140,6 +140,11 @@ class SettingsDia(QDialog):
         open_cfg_btn.clicked.connect(self.open_config_file)
         layout.addWidget(open_cfg_btn)
         
+        # One-click Setup Button
+        setup_btn = QPushButton("一键配置 (Run setup.bat)")
+        setup_btn.clicked.connect(self.run_setup_bat)
+        layout.addWidget(setup_btn)
+        
         layout.addStretch()
         
         # Close button
@@ -200,6 +205,20 @@ class SettingsDia(QDialog):
         except Exception as e:
             QMessageBox.warning(self, "Error", f"修改注册表失败:\n{e}")
             self.autostart_cb.setChecked(not state)
+
+    def run_setup_bat(self):
+        import subprocess
+        if getattr(sys, 'frozen', False):
+            base_dir = Path(sys.executable).parent
+        else:
+            base_dir = Path(__file__).parent
+            
+        setup_bat = base_dir / "setup.bat"
+        if setup_bat.exists():
+            subprocess.Popen([str(setup_bat)], cwd=str(base_dir), creationflags=subprocess.CREATE_NEW_CONSOLE)
+            QMessageBox.information(self, "Success", f"已尝试运行:\n{setup_bat}")
+        else:
+            QMessageBox.warning(self, "Error", f"找不到文件:\n{setup_bat}")
 
 if __name__ == "__main__":
     from PySide6.QtWidgets import QApplication
